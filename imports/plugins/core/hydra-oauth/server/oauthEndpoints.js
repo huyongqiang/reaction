@@ -3,7 +3,7 @@ import Logger from "@reactioncommerce/logger";
 import { WebApp } from "meteor/webapp";
 import hydra from "./util/hydra";
 
-const { HYDRA_OAUTH2_ERROR_URL } = process.env;
+const { HYDRA_OAUTH2_ERROR_URL, HYDRA_SESSION_LIFESPAN } = process.env;
 const errorHandler = (errorMessage, res) => {
   Logger.error(`Error while performing Hydra login request - ${errorMessage}`);
   if (HYDRA_OAUTH2_ERROR_URL) {
@@ -29,7 +29,8 @@ WebApp.connectHandlers.use("/login", (req, res) => {
           subject: getLoginRequestRes.subject
         });
         Logger.debug(`Auth status confirmed from Hydra. Redirecting to: ${acceptLoginResponse.redirect_to}`);
-        res.redirect(acceptLoginResponse.redirect_to);
+        res.writeHead(301, { Location: acceptLoginResponse.redirect_to });
+        return res.end();
       }
 
       res.writeHead(301, { Location: `/account/login?action=${loginAction}&login_challenge=${challenge}` });
@@ -43,7 +44,11 @@ WebApp.connectHandlers.use("/consent", (req, res) => {
   const challenge = req.query.consent_challenge;
   // Call acceptConsent without presenting a consent form to the user
   hydra
-    .acceptConsentRequest(challenge, {})
+    .acceptConsentRequest(challenge, {
+      remember: true,
+      remember_for: HYDRA_SESSION_LIFESPAN || 3600, // eslint-disable-line camelcase
+      session: {} // we are not adding extra user info to session
+    })
     .then((consentResponse) => {
       Logger.debug(`Consent call complete. Redirecting to: ${consentResponse.redirect_to}`);
       res.writeHead(301, { Location: consentResponse.redirect_to });
